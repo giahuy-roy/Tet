@@ -1,0 +1,60 @@
+-- Auto Nhặt Trái & Auto Đổi Server khi không còn trái
+-- Discord: https://discord.gg/Qz49Btrg (nếu bạn muốn thêm GUI)
+
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local PlaceId = game.PlaceId
+
+-- Hàm lấy danh sách server
+function getServers()
+    local servers = {}
+    local cursor = ""
+    local found = false
+
+    repeat
+        local response = game:HttpGet("https://games.roblox.com/v1/games/"..PlaceId.."/servers/Public?sortOrder=2&limit=100&cursor="..cursor)
+        local data = HttpService:JSONDecode(response)
+        for i,v in pairs(data.data) do
+            if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                table.insert(servers, v.id)
+            end
+        end
+        cursor = data.nextPageCursor
+    until not cursor
+
+    return servers
+end
+
+-- Hàm đổi server
+function hopServer()
+    local servers = getServers()
+    if #servers > 0 then
+        TeleportService:TeleportToPlaceInstance(PlaceId, servers[math.random(1, #servers)], game.Players.LocalPlayer)
+    end
+end
+
+-- Auto nhặt trái
+spawn(function()
+    while wait(2) do
+        for i,v in pairs(game.Workspace:GetChildren()) do
+            if v:IsA("Tool") and v:FindFirstChild("Handle") and v.Name ~= "Banana" then
+                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = v.Handle.CFrame
+                wait(1)
+                firetouchinterest(game.Players.LocalPlayer.Character.HumanoidRootPart, v.Handle, 0)
+                firetouchinterest(game.Players.LocalPlayer.Character.HumanoidRootPart, v.Handle, 1)
+                wait(0.5)
+            end
+        end
+    end
+end)
+
+-- Nếu không còn trái thì đổi server
+spawn(function()
+    while wait(10) do
+        local hasFruit = false
+        for i,v in pairs(game.Workspace:GetChildren()) do
+            if v:IsA("Tool") and v:FindFirstChild("Handle") and v.Name ~= "Banana" then
+                hasFruit = true
+                break
+            end
+        end
