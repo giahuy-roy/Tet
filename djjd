@@ -1,0 +1,136 @@
+-- GiaHuy Hub | Fruit Collector + Server Hop + UI ảnh
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+local failedTries, maxTries = 0, 3
+local GamePlaceId = 2753915549
+
+-- UI chính
+local gui = Instance.new("ScreenGui", game.CoreGui)
+gui.Name = "GiaHuyHubUI"
+
+local main = Instance.new("Frame", gui)
+main.Size = UDim2.new(0, 320, 0, 160)
+main.Position = UDim2.new(0.02, 0, 0.6, 0)
+main.BackgroundTransparency = 0
+main.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+main.BorderSizePixel = 0
+
+local bg = Instance.new("ImageLabel", main)
+bg.Size = UDim2.new(1, 0, 1, 0)
+bg.Position = UDim2.new(0, 0, 0, 0)
+bg.Image = "rbxassetid://100663458322564"
+bg.ImageTransparency = 0.3
+bg.BackgroundTransparency = 1
+
+local title = Instance.new("TextLabel", main)
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundTransparency = 1
+title.Text = "GiaHuy Hub - Auto Fruit Collector"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextStrokeTransparency = 0
+title.Font = Enum.Font.GothamBold
+title.TextScaled = true
+
+local status = Instance.new("TextLabel", main)
+status.Position = UDim2.new(0, 0, 0, 35)
+status.Size = UDim2.new(1, 0, 1, -35)
+status.BackgroundTransparency = 1
+status.Text = "Đang khởi động..."
+status.TextColor3 = Color3.fromRGB(255, 255, 255)
+status.TextStrokeTransparency = 0
+status.TextWrapped = true
+status.TextYAlignment = Enum.TextYAlignment.Top
+status.Font = Enum.Font.Gotham
+status.TextScaled = true
+
+local function notify(text, color)
+	status.Text = text
+	status.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+end
+
+-- Teleport
+local function teleportTo(pos)
+	local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		hrp.CFrame = CFrame.new(pos + Vector3.new(0, 5, 0))
+	end
+end
+
+-- Lưu trái
+local function tryStore()
+	wait(0.5)
+	for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+		if tool:IsA("Tool") and string.find(tool.Name:lower(), "fruit") then
+			notify("Cất trái: " .. tool.Name, Color3.fromRGB(0, 200, 255))
+			local success = pcall(function()
+				ReplicatedStorage.Remotes.CommF_:InvokeServer("StoreFruit", tool.Name)
+			end)
+			if success then
+				notify("Đã lưu: " .. tool.Name, Color3.fromRGB(100, 255, 100))
+			else
+				notify("Không thể lưu trái (có thể thiếu Gamepass)", Color3.fromRGB(255, 100, 100))
+			end
+			wait(1)
+		end
+	end
+end
+
+-- Đổi server
+local function hopServer()
+	notify("Chuyển server...", Color3.fromRGB(255, 200, 0))
+	local servers = {}
+	local response = game:HttpGet("https://games.roblox.com/v1/games/" .. GamePlaceId .. "/servers/Public?sortOrder=Desc&limit=100")
+	local data = HttpService:JSONDecode(response)
+	for _, v in pairs(data.data) do
+		if v.playing < v.maxPlayers and v.id ~= game.JobId then
+			table.insert(servers, v.id)
+		end
+	end
+	if #servers > 0 then
+		TeleportService:TeleportToPlaceInstance(GamePlaceId, servers[math.random(1, #servers)], LocalPlayer)
+	else
+		notify("Không tìm thấy server mới!", Color3.fromRGB(255, 100, 100))
+	end
+end
+
+-- Nhặt trái
+local function collectFruits()
+	local found = false
+	for _, fruit in pairs(Workspace:GetChildren()) do
+		if fruit:IsA("Tool") and fruit:FindFirstChild("Handle") and string.find(fruit.Name:lower(), "fruit") then
+			notify("Tìm thấy: " .. fruit.Name, Color3.fromRGB(255, 255, 0))
+			teleportTo(fruit.Handle.Position)
+			wait(1)
+			pcall(function()
+				firetouchinterest(LocalPlayer.Character.HumanoidRootPart, fruit.Handle, 0)
+				firetouchinterest(LocalPlayer.Character.HumanoidRootPart, fruit.Handle, 1)
+			end)
+			wait(1.5)
+			tryStore()
+			found = true
+			break
+		end
+	end
+	return found
+end
+
+-- Vòng lặp chính
+while true do
+	local success, found = pcall(collectFruits)
+	if success and found then
+		notify("Đã nhặt trái!", Color3.fromRGB(100, 255, 100))
+		failedTries = 0
+	else
+		failedTries += 1
+		notify("Không có trái... (" .. failedTries .. "/" .. maxTries .. ")", Color3.fromRGB(200, 200, 200))
+		if failedTries >= maxTries then
+			hopServer()
+			failedTries = 0
+		end
+	end
+	wait(10)
+end
