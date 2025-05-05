@@ -1,0 +1,122 @@
+-- GiaHuy Hub | Fruit Collector 2025 + Auto Server Hop
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+local maxTries = 3
+local failedTries = 0
+
+-- Danh sách trái hiếm 2025
+local rareFruits = {
+    "Dragon", "Leopard", "Spirit", "Dough", "Venom", "Control", "Shadow",
+    "Gravity", "Eagle", "Creation", "Yeti"
+}
+
+-- Giao diện thông báo đơn giản
+local gui = Instance.new("ScreenGui", game.CoreGui)
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 260, 0, 90)
+frame.Position = UDim2.new(0.02, 0, 0.7, 0)
+frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+frame.BackgroundTransparency = 0.1
+
+local status = Instance.new("TextLabel", frame)
+status.Size = UDim2.new(1, 0, 1, 0)
+status.Text = "GiaHuy Hub - Đang kiểm tra trái..."
+status.TextColor3 = Color3.fromRGB(255, 255, 255)
+status.BackgroundTransparency = 1
+status.TextScaled = true
+
+-- Hàm hiển thị trạng thái
+local function notify(text, color)
+    status.Text = text
+    status.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+end
+
+-- Di chuyển tới vị trí trái
+local function teleportTo(pos)
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        hrp.CFrame = CFrame.new(pos + Vector3.new(0, 5, 0))
+    end
+end
+
+-- Lưu trái vào kho nếu có gamepass
+local function storeFruit(name)
+    local args = {"StoreFruit", name}
+    ReplicatedStorage.Remotes.CommF_:InvokeServer(unpack(args))
+end
+
+local function tryStore()
+    for _, tool in pairs(LocalPlayer.Backpack:GetChildren()) do
+        if tool:IsA("Tool") and string.find(tool.Name:lower(), "fruit") then
+            notify("Lưu vào kho: " .. tool.Name, Color3.fromRGB(0, 200, 255))
+            pcall(function()
+                storeFruit(tool.Name)
+            end)
+            wait(1)
+        end
+    end
+end
+
+-- Đổi server khi không có trái
+local function hopServer()
+    notify("Không có trái - Đang chuyển server...", Color3.fromRGB(255, 200, 0))
+    local servers = {}
+    local success, response = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(
+            "https://games.roblox.com/v1/games/2753915549/servers/Public?sortOrder=Desc&limit=100"))
+    end)
+    if success then
+        for _, server in pairs(response.data) do
+            if server.playing < server.maxPlayers and server.id ~= game.JobId then
+                table.insert(servers, server.id)
+            end
+        end
+        if #servers > 0 then
+            TeleportService:TeleportToPlaceInstance(2753915549, servers[math.random(1, #servers)], LocalPlayer)
+        else
+            notify("Không tìm thấy server khác!", Color3.fromRGB(255, 100, 100))
+        end
+    else
+        notify("Lỗi khi lấy danh sách server!", Color3.fromRGB(255, 0, 0))
+    end
+end
+
+-- Tìm và nhặt trái
+local function collectFruits()
+    local found = false
+    for _, fruit in pairs(Workspace:GetChildren()) do
+        if fruit:IsA("Tool") and fruit:FindFirstChild("Handle") and string.find(fruit.Name:lower(), "fruit") then
+            teleportTo(fruit.Handle.Position)
+            wait(1.2)
+            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, fruit.Handle, 0)
+            firetouchinterest(LocalPlayer.Character.HumanoidRootPart, fruit.Handle, 1)
+            notify("Nhặt: " .. fruit.Name, Color3.fromRGB(100, 255, 100))
+            wait(1)
+            tryStore()
+            found = true
+            break
+        end
+    end
+    return found
+end
+
+-- Vòng lặp chính
+while true do
+    local success, found = pcall(collectFruits)
+    if not found then
+        failedTries += 1
+        if failedTries >= maxTries then
+            hopServer()
+            failedTries = 0
+        else
+            notify("Không có trái... (" .. failedTries .. "/" .. maxTries .. ")")
+        end
+    else
+        failedTries = 0
+    end
+    wait(10)
+end
